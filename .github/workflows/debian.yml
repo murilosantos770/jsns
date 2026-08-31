@@ -1,45 +1,96 @@
-name: Debian Server
+name: Ubuntu RDP - Acesso
 
 on:
   workflow_dispatch:
 
 jobs:
-  debian:
+  rdp:
     runs-on: ubuntu-24.04
-    timeout-minutes: 360
+    timeout-minutes: 60
 
     steps:
-      - name: Informações do servidor
+      - name: Instalar XFCE e XRDP
         run: |
-          echo "======================================"
-          echo "          DEBIAN SERVER"
-          echo "======================================"
+          sudo apt-get update
+          sudo DEBIAN_FRONTEND=noninteractive apt-get install -y \
+            xfce4 \
+            xfce4-goodies \
+            xrdp \
+            openssh-client
 
-          echo "HOST:"
-          hostname
-
-          echo
-          echo "IP LOCAL:"
-          hostname -I
-
-          echo
-          echo "INTERFACES:"
-          ip -4 addr show
-
-          echo
-          echo "IP PÚBLICO:"
-          curl -4 https://api.ipify.org
-          echo
-
-          echo
-          echo "KERNEL:"
-          uname -a
-
-          echo "======================================"
-
-      - name: Manter servidor ativo
+      - name: Criar usuário
         run: |
-          echo "Servidor ativo por até 6 horas."
+          sudo useradd -m -s /bin/bash rdpuser
+          echo 'rdpuser:123456' | sudo chpasswd
+          sudo usermod -aG sudo rdpuser
+
+      - name: Configurar XFCE
+        run: |
+          echo "startxfce4" | sudo tee /home/rdpuser/.xsession
+          sudo chown rdpuser:rdpuser /home/rdpuser/.xsession
+
+      - name: Iniciar XRDP
+        run: |
+          sudo systemctl enable xrdp
+          sudo systemctl restart xrdp
+          sleep 5
+
+          echo "===== XRDP ====="
+          sudo ss -lntp | grep ':3389'
+
+      - name: Criar túnel TCP
+        run: |
+          echo "=========================================="
+          echo "        CRIANDO ACESSO RDP"
+          echo "=========================================="
+
+          ssh \
+            -o StrictHostKeyChecking=no \
+            -o UserKnownHostsFile=/dev/null \
+            -o ServerAliveInterval=30 \
+            -o ServerAliveCountMax=3 \
+            -p 443 \
+            -R0:localhost:3389 \
+            tcp@free.pinggy.io 2>&1 | tee pinggy.log &
+
+          echo "Esperando o endereço..."
+          
+          for i in {1..30}; do
+            if grep -qE 'tcp://[^ ]+' pinggy.log; then
+              break
+            fi
+            sleep 2
+          done
+
+          ENDPOINT=$(grep -oE 'tcp://[^ ]+' pinggy.log | head -1 | sed 's#tcp://##')
+
+          echo
+          echo "=========================================="
+          echo "             RDP ONLINE"
+          echo "=========================================="
+          echo
+          echo "ENDEREÇO:"
+          echo "$ENDPOINT"
+          echo
+          echo "USUÁRIO:"
+          echo "rdpuser"
+          echo
+          echo "SENHA:"
+          echo "123456"
+          echo
+          echo "=========================================="
+
+          if [ -z "$ENDPOINT" ]; then
+            echo "ERRO: não foi possível obter o endereço."
+            cat pinggy.log
+            exit 1
+          fi
+
+      - name: Manter RDP ativo
+        run: |
+          echo "Servidor RDP ativo."
+          echo "Não feche/cancele este workflow."
+
           while true; do
-            sleep 60
+            sleep 30
           done
