@@ -1,0 +1,45 @@
+name: Debian Server
+
+on:
+  workflow_dispatch:
+
+jobs:
+  debian:
+    runs-on: ubuntu-24.04
+    timeout-minutes: 360
+
+    steps:
+      - name: Informações do servidor
+        run: |
+          echo "======================================"
+          echo "          DEBIAN SERVER"
+          echo "======================================"
+
+          echo "HOST:"
+          hostname
+
+          echo
+          echo "IP LOCAL:"
+          hostname -I
+
+          echo
+          echo "INTERFACES:"
+          ip -4 addr show
+
+          echo
+          echo "IP PÚBLICO:"
+          curl -4 https://api.ipify.org
+          echo
+
+          echo
+          echo "KERNEL:"
+          uname -a
+
+          echo "======================================"
+
+      - name: Manter servidor ativo
+        run: |
+          echo "Servidor ativo por até 6 horas."
+          while true; do
+            sleep 60
+          done
