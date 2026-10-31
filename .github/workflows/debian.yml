@@ -6,17 +6,17 @@ on:
 jobs:
   rdp:
     runs-on: ubuntu-22.04
-    # Tempo aumentado para o limite máximo de 6 horas (360 minutos)
     timeout-minutes: 360
 
     steps:
-      - name: Instalar XFCE e XRDP
+      - name: Instalar XFCE, XRDP e DBus
         run: |
           sudo apt-get update
           sudo DEBIAN_FRONTEND=noninteractive apt-get install -y \
             xfce4 \
             xfce4-goodies \
             xrdp \
+            dbus-x11 \
             openssh-client
 
       - name: Criar usuário
@@ -25,10 +25,14 @@ jobs:
           echo 'rdpuser:123456' | sudo chpasswd
           sudo usermod -aG sudo rdpuser
 
-      - name: Configurar XFCE Nativo
+      - name: Configurar XFCE e Forçar Sessão
         run: |
-          echo "startxfce4" | sudo tee /home/rdpuser/.xsession
+          # Define a sessão no arquivo do usuário
+          echo "xfce4-session" | sudo tee /home/rdpuser/.xsession
           sudo chown rdpuser:rdpuser /home/rdpuser/.xsession
+          
+          # Correção definitiva: altera a inicialização global do XRDP para rodar diretamente o XFCE
+          sudo sed -i 's|test -x /etc/X11/Xsession \&\& exec /etc/X11/Xsession|exec /usr/bin/xfce4-session|g' /etc/xrdp/startwm.sh
 
       - name: Iniciar XRDP
         run: |
