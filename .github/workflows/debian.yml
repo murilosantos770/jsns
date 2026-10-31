@@ -1,72 +1,57 @@
-name: Ubuntu VNC - Acesso
+name: Ubuntu RDP Estavel - Acesso
 
 on:
   workflow_dispatch:
 
 jobs:
-  vnc:
-    runs-on: ubuntu-24.04
-    timeout-minutes: 300
+  rdp:
+    runs-on: ubuntu-22.04
+    # Tempo aumentado para o limite máximo de 6 horas (360 minutos)
+    timeout-minutes: 360
 
     steps:
-      - name: Instalar XFCE, VNC Server e Dependências
+      - name: Instalar XFCE e XRDP
         run: |
           sudo apt-get update
           sudo DEBIAN_FRONTEND=noninteractive apt-get install -y \
             xfce4 \
             xfce4-goodies \
-            tigervnc-standalone-server \
-            dbus-x11 \
+            xrdp \
             openssh-client
 
-      - name: Criar usuário e configurar o VNC
+      - name: Criar usuário
         run: |
-          # Cria o usuário normal
           sudo useradd -m -s /bin/bash rdpuser
           echo 'rdpuser:123456' | sudo chpasswd
           sudo usermod -aG sudo rdpuser
 
-          # Cria a pasta de configuração do VNC do usuário
-          sudo mkdir -p /home/rdpuser/.vnc
-          
-          # Define a senha de acesso do VNC (usando a mesma: 123456)
-          echo "123456" | sudo vncpasswd -f > /home/rdpuser/.vnc/passwd
-          sudo chmod 600 /home/rdpuser/.vnc/passwd
-
-          # Cria o arquivo xstartup para forçar a inicialização do XFCE
-          cat << 'EOF' | sudo tee /home/rdpuser/.vnc/xstartup
-          #!/bin/sh
-          unset SESSION_MANAGER
-          unset DBUS_SESSION_BUS_ADDRESS
-          export XDG_CURRENT_DESKTOP=XFCE
-          exec /usr/bin/startxfce4
-          EOF
-          
-          sudo chmod +x /home/rdpuser/.vnc/xstartup
-          sudo chown -R rdpuser:rdpuser /home/rdpuser/
-
-      - name: Iniciar o Servidor VNC
+      - name: Configurar XFCE Nativo
         run: |
-          # Inicia o servidor VNC na tela :1 (Porta padrão 5901) usando o usuário criado
-          sudo -u rdpuser vncserver :1 -geometry 1280x720 -depth 24
-          
-          echo "===== VNC STATUS ====="
-          sudo ss -lntp | grep ':5901'
+          echo "startxfce4" | sudo tee /home/rdpuser/.xsession
+          sudo chown rdpuser:rdpuser /home/rdpuser/.xsession
 
-      - name: Criar túnel TCP (Porta 5901)
+      - name: Iniciar XRDP
+        run: |
+          sudo systemctl enable xrdp
+          sudo systemctl restart xrdp
+          sleep 5
+
+          echo "===== XRDP ====="
+          sudo ss -lntp | grep ':3389'
+
+      - name: Criar túnel TCP
         run: |
           echo "=========================================="
-          echo "        CRIANDO ACESSO VNC"
+          echo "        CRIANDO ACESSO RDP"
           echo "=========================================="
 
-          # Redireciona a porta 5901 do VNC através do túnel do Pinggy
           ssh \
             -o StrictHostKeyChecking=no \
             -o UserKnownHostsFile=/dev/null \
             -o ServerAliveInterval=30 \
             -o ServerAliveCountMax=3 \
             -p 443 \
-            -R0:localhost:5901 \
+            -R0:localhost:3389 \
             tcp@free.pinggy.io 2>&1 | tee pinggy.log &
 
           echo "Esperando o endereço..."
@@ -82,26 +67,29 @@ jobs:
 
           echo
           echo "=========================================="
-          echo "             VNC ONLINE"
+          echo "             RDP ONLINE"
           echo "=========================================="
           echo
-          echo "ENDEREÇO PARA ENTRAR NO APP VNC:"
+          echo "ENDEREÇO:"
           echo "$ENDPOINT"
           echo
-          echo "SENHA DO VNC:"
+          echo "USUÁRIO:"
+          echo "rdpuser"
+          echo
+          echo "SENHA:"
           echo "123456"
           echo
           echo "=========================================="
 
           if [ -z "$ENDPOINT" ]; then
-            echo "ERRO: não foi possível obter o endereço do túnel."
+            echo "ERRO: não foi possível obter o endereço."
             cat pinggy.log
             exit 1
           fi
 
-      - name: Manter VNC ativo
+      - name: Manter RDP ativo
         run: |
-          echo "Servidor VNC ativo."
+          echo "Servidor RDP ativo."
           echo "Não feche/cancele este workflow."
 
           while true; do
