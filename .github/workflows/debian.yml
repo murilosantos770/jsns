@@ -9,13 +9,14 @@ jobs:
     timeout-minutes: 60
 
     steps:
-      - name: Instalar XFCE e XRDP
+      - name: Instalar XFCE, XRDP e Dependências
         run: |
           sudo apt-get update
           sudo DEBIAN_FRONTEND=noninteractive apt-get install -y \
             xfce4 \
             xfce4-goodies \
             xrdp \
+            dbus-x11 \
             openssh-client
 
       - name: Criar usuário
@@ -24,13 +25,22 @@ jobs:
           echo 'rdpuser:123456' | sudo chpasswd
           sudo usermod -aG sudo rdpuser
 
-      - name: Configurar XFCE
+      - name: Configurar Ambiente e XFCE
         run: |
-          echo "startxfce4" | sudo tee /home/rdpuser/.xsession
-          sudo chown rdpuser:rdpuser /home/rdpuser/.xsession
+          # Define a sessão correta para o xrdp carregar o XFCE
+          echo "xfce4-session" | sudo tee /home/rdpuser/.xsession
+          
+          # Injeta as variáveis de ambiente necessárias para evitar o erro de failsafe
+          echo "export XDG_CURRENT_DESKTOP=XFCE" | sudo tee -a /home/rdpuser/.bashrc
+          echo "export XDG_DATA_DIRS=/usr/share/xfce4:/usr/share:/usr/local/share" | sudo tee -a /home/rdpuser/.bashrc
+          
+          # Corrige permissões de dono do diretório do usuário
+          sudo chown -R rdpuser:rdpuser /home/rdpuser/
 
       - name: Iniciar XRDP
         run: |
+          # Adiciona o usuário xrdp ao grupo ssl-cert para evitar erros de certificado
+          sudo adduser xrdp ssl-cert || true
           sudo systemctl enable xrdp
           sudo systemctl restart xrdp
           sleep 5
